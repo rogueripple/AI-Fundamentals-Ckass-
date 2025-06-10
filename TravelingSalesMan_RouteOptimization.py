@@ -70,7 +70,7 @@ def optimize_route(client, towns):
     :param towns: Full list of towns, including Nairobi
     :return: optimized town order including Nairobi at start/end
     """
-    start = towns[0]  # Nairobi
+    start = towns[0]  # Nairobi start point
     others = towns[1:]
     best_distance = float('inf')
     best_route = None
