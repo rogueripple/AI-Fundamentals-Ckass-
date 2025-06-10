@@ -74,18 +74,44 @@ def optimize_route(client, towns):
     others = towns[1:]
     best_distance = float('inf')
     best_route = None
+    all_routes = []
+    
+    print("\nCalculating all possible routes...")
+    print("-" * 50)
+    
     for perm in permutations(others):
         route = [start] + list(perm) + [start]  # Start and end at Nairobi
         dist = calculate_route_distance(client, route)
-        if dist is not None and dist < best_distance:
-            best_distance = dist
-            best_route = route
+        if dist is not None:
+            route_names = [town['name'] for town in route]
+            route_str = " → ".join(route_names)
+            all_routes.append((route, dist, route_str))
+            print(f"Route: {route_str}")
+            print(f"Distance: {dist/1000:.2f} km")
+            print("-" * 50)
+            
+            if dist < best_distance:
+                best_distance = dist
+                best_route = route
+    
+    # Sort routes by distance
+    all_routes.sort(key=lambda x: x[1])
+    
+    # Print the shortest route
+    if all_routes:
+        shortest_route, shortest_dist, shortest_str = all_routes[0]
+        print("\nShortest Route Found:")
+        print("=" * 50)
+        print(f"Route: {shortest_str}")
+        print(f"Total Distance: {shortest_dist/1000:.2f} km")
+        print("=" * 50)
+    
     return best_route
 
 
 def create_map(towns, route):
     """
-    Create a folium map with markers, optimized route, and animated direction arrow.
+    Create a folium map with markers, optimized route, and animated car movement.
     :param towns: full towns list
     :param route: optimized route including start/end
     """
@@ -111,17 +137,7 @@ def create_map(towns, route):
     # Create route coordinates
     route_coords = [(town['latitude'], town['longitude']) for town in route]
     
-    # Add the animated ant path with enhanced settings
-    ant_path = AntPath(
-        route_coords,
-        color='blue',
-        weight=5,
-        delay=1000,  # Delay between each ant movement
-        dash_array=[10, 20],  # Creates a dashed line effect
-        pulse_color='red'  # Color of the moving ants
-    ).add_to(m)
-    
-    # Add a regular polyline for the base route
+    # Add the base route line
     folium.PolyLine(
         route_coords,
         color='blue',
@@ -129,21 +145,110 @@ def create_map(towns, route):
         opacity=0.5
     ).add_to(m)
     
-    # Add animated direction arrows
-    folium.plugins.PolyLineTextPath(
-        folium.PolyLine(route_coords),
-        '➔ ',  # Unicode arrow
-        repeat=True,
-        offset=7,
-        attributes={'font-size': '24', 'color': 'red'}
+    # Add the animated ant path
+    ant_path = AntPath(
+        route_coords,
+        color='blue',
+        weight=5,
+        delay=1000,
+        dash_array=[10, 20],
+        pulse_color='red'
     ).add_to(m)
     
-    # Add a layer control to toggle different elements
+    # Create car icon HTML with rotation
+    car_html = """
+    <div style="position: absolute; transform: translate(-50%, -50%);">
+        <div style="font-size: 24px; transform: rotate({rotation}deg);">🚗</div>
+    </div>
+    """
+    
+    # Add the car marker
+    car_marker = folium.Marker(
+        location=route_coords[0],
+        icon=folium.DivIcon(
+            html=car_html.format(rotation=0),
+            icon_size=(24, 24),
+            icon_anchor=(12, 12)
+        ),
+        popup='Traveling Car'
+    ).add_to(m)
+    
+    # Add JavaScript for car animation
+    js_code = """
+    var car = document.querySelector('div[style="font-size: 24px;"]').parentElement;
+    var route = %s;
+    var currentIndex = 0;
+    var animationSpeed = 2000; // 2 seconds between each point
+    
+    function calculateRotation(start, end) {
+        var dx = end[1] - start[1];
+        var dy = end[0] - start[0];
+        return Math.atan2(dy, dx) * 180 / Math.PI;
+    }
+    
+    function moveCar() {
+        if (currentIndex < route.length - 1) {
+            var current = route[currentIndex];
+            var next = route[currentIndex + 1];
+            var rotation = calculateRotation(current, next);
+            
+            car.style.transform = 'translate(' + next[1] + 'px, ' + next[0] + 'px) rotate(' + rotation + 'deg)';
+            currentIndex++;
+            setTimeout(moveCar, animationSpeed);
+        }
+    }
+    
+    moveCar();
+    """ % route_coords
+    
+    # Add the JavaScript to the map
+    m.get_root().html.add_child(folium.Element(f'<script>{js_code}</script>'))
+    
+    # Add a layer control
     folium.LayerControl().add_to(m)
     
     # Save the map
     m.save('optimized_route_map.html')
-    print("Interactive animated map created and saved as 'optimized_route_map.html'.")
+    print("Interactive animated map with car movement created and saved as 'optimized_route_map.html'.")
+
+def calculate_all_routes(client, towns):
+    """
+    Calculate and display all possible routes with their distances.
+    :param client: ORS client
+    :param towns: List of towns
+    :return: List of tuples containing (route, distance)
+    """
+    start = towns[0]  # Nairobi
+    others = towns[1:]
+    all_routes = []
+    
+    print("\nCalculating all possible routes...")
+    print("-" * 50)
+    
+    for perm in permutations(others):
+        route = [start] + list(perm) + [start]  # Start and end at Nairobi
+        dist = calculate_route_distance(client, route)
+        if dist is not None:
+            route_names = [town['name'] for town in route]
+            route_str = " → ".join(route_names)
+            all_routes.append((route, dist, route_str))
+            print(f"Route: {route_str}")
+            print(f"Distance: {dist/1000:.2f} km")
+            print("-" * 50)
+    
+    # Sort routes by distance
+    all_routes.sort(key=lambda x: x[1])
+    
+    # Print the shortest route
+    if all_routes:
+        shortest_route, shortest_dist, shortest_str = all_routes[0]
+        print("\nShortest Route Found:")
+        print("=" * 50)
+        print(f"Route: {shortest_str}")
+        print(f"Total Distance: {shortest_dist/1000:.2f} km")
+        print("=" * 50)
+        
+    return all_routes
 
 def main():
     # Example towns data (replace with actual town data)
@@ -154,23 +259,29 @@ def main():
         {'name': 'Nandi', 'latitude': 0.1000, 'longitude': 35.1833},
         {'name': 'Kericho', 'latitude': -0.3673, 'longitude': 35.2830}
     ]
+    
     # Connect to OpenRouteService
     ors_client = connect_openrouteservice(ORS_API_KEY)
     if ors_client is None:
         print("Could not connect to OpenRouteService. Exiting.")
         return
+    
     # Optimize the route
     optimized_route = optimize_route(ors_client, towns)
     if optimized_route is None:
         print("No valid route found. Please check your internet connection or OpenRouteService API availability.")
         return
+    
     # Create a map showing the optimized route
     create_map(towns, optimized_route)
+    print("\nMap has been created and saved as 'optimized_route_map.html'")
+    print("Please open the HTML file in your web browser to view the route visualization.")
+
 if __name__ == "__main__":
     start_time = time.time()
     main()
     end_time = time.time()
-    print(f"Route optimization completed in {end_time - start_time:.2f} seconds.")
+    print(f"\nRoute optimization completed in {end_time - start_time:.2f} seconds.")
 # Optional: You can visualize the route on a static 2D plot using matplotlib if needed
 # Note: The above code assumes you have the OpenRouteService API key and the necessary libraries installed.
 
