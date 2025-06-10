@@ -9,7 +9,7 @@ import time                          # Optional: To measure how long route calcu
 from folium.plugins import AntPath, PolyLineTextPath
 
 
-# connecting the openrouteservice API
+# connecting to the openrouteservice API
 
 ORS_API_KEY='5b3ce3597851110001cf6248814f50c45b5146a09821fbceab123886'
 def connect_openrouteservice(api_key):
